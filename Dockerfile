@@ -14,6 +14,7 @@ RUN apk add --no-cache \
 # Set environment variables for Playwright
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV NODE_ENV=production
 
 # Set working directory
 WORKDIR /app
@@ -21,8 +22,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies and run postinstall script
+RUN npm ci --only=production && npm run postinstall
 
 # Copy source code
 COPY . .
@@ -31,4 +32,4 @@ COPY . .
 EXPOSE 3000
 
 # Start the application
-CMD ["npm", "start"] 
+CMD ["npm", "run", "start:prod"] 

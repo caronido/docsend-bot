@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "start:prod": "npx playwright install chromium && node src/index.js",
     "dev": "nodemon src/index.js",
     "postinstall": "npx playwright install chromium",
     "test": "jest",

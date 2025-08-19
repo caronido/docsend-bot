@@ -30,17 +30,62 @@ class DocSendService {
         ]
       };
 
-      // Use system Chromium in production if available
-      if (process.env.NODE_ENV === 'production' && process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
-        launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-        logger.info('Using system Chromium for production', { path: launchOptions.executablePath });
+      // Force system Chromium in production
+      if (process.env.NODE_ENV === 'production') {
+        // Try multiple possible paths for system Chromium
+        const possiblePaths = [
+          process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+          '/usr/bin/chromium-browser',
+          '/usr/bin/chromium',
+          '/usr/bin/google-chrome',
+          '/usr/bin/google-chrome-stable'
+        ].filter(Boolean);
+
+        let chromiumPath = null;
+        for (const path of possiblePaths) {
+          try {
+            const fs = require('fs');
+            if (fs.existsSync(path)) {
+              chromiumPath = path;
+              break;
+            }
+          } catch (e) {
+            // Continue to next path
+          }
+        }
+
+        if (chromiumPath) {
+          launchOptions.executablePath = chromiumPath;
+          logger.info('Using system Chromium for production', { path: chromiumPath });
+        } else {
+          logger.warn('No system Chromium found, will try to use Playwright bundled browser');
+        }
       }
 
       if (config.proxy.url) {
         launchOptions.proxy = { server: config.proxy.url };
       }
 
-      this.browser = await chromium.launch(launchOptions);
+      // Try to launch browser
+      try {
+        this.browser = await chromium.launch(launchOptions);
+      } catch (error) {
+        // If launch fails and we're in production, try to install browsers
+        if (process.env.NODE_ENV === 'production' && error.message.includes('ENOENT')) {
+          logger.warn('Browser launch failed, attempting to install Playwright browsers...');
+          try {
+            const { execSync } = require('child_process');
+            execSync('npx playwright install chromium', { stdio: 'inherit' });
+            logger.info('Playwright browsers installed successfully, retrying launch...');
+            this.browser = await chromium.launch(launchOptions);
+          } catch (installError) {
+            logger.error('Failed to install Playwright browsers', { error: installError.message });
+            throw new Error('Browser initialization failed and browser installation failed. Please ensure Chromium is available.');
+          }
+        } else {
+          throw error;
+        }
+      }
       
       this.context = await this.browser.newContext({
         viewport: { width: 1920, height: 1080 },
