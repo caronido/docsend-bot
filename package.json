@@ -1,0 +1,51 @@
+{
+  "name": "docsend-parser",
+  "version": "1.0.0",
+  "description": "Slack bot that converts DocSend links to PDFs using headless browser screenshots",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/",
+    "deploy": "serverless deploy"
+  },
+  "keywords": [
+    "slack",
+    "docsend",
+    "pdf",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "aws-sdk": "^2.1490.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "googleapis": "^128.0.0",
+    "helmet": "^7.1.0",
+    "imap": "^0.8.19",
+    "mailparser": "^3.7.4",
+    "nodemailer": "^6.9.7",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.40.0",
+    "rate-limiter-flexible": "^3.0.0",
+    "redis": "^4.6.10",
+    "sharp": "^0.32.6",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "serverless": "^3.38.0",
+    "serverless-offline": "^12.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
