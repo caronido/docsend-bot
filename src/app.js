@@ -4,13 +4,36 @@ const { logger } = require('./utils/logger');
 const RateLimiter = require('./utils/rateLimiter');
 const JobProcessor = require('./services/jobProcessor');
 
-// Initialize the Slack app
-const app = new App({
+// Determine environment and configuration
+const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = !isProduction;
+
+logger.info('Initializing Slack app', { 
+  environment: isProduction ? 'production' : 'development',
+  socketMode: isDevelopment,
+  port: process.env.PORT || 3000
+});
+
+// Initialize the Slack app with conditional Socket Mode
+const appConfig = {
   token: config.slack.botToken,
   signingSecret: config.slack.signingSecret,
-  socketMode: true,
-  appToken: config.slack.appToken,
-});
+};
+
+// Only use Socket Mode in development
+if (isDevelopment) {
+  if (!config.slack.appToken) {
+    logger.error('App token required for development mode (Socket Mode)');
+    process.exit(1);
+  }
+  appConfig.socketMode = true;
+  appConfig.appToken = config.slack.appToken;
+  logger.info('🔌 Development mode: Using Socket Mode');
+} else {
+  logger.info('🚀 Production mode: Using HTTP endpoints');
+}
+
+const app = new App(appConfig);
 
 // Initialize services
 const rateLimiter = new RateLimiter();
@@ -231,17 +254,5 @@ process.on('SIGINT', async () => {
   
   process.exit(0);
 });
-
-// Start the app
-(async () => {
-  try {
-    await app.start();
-    logger.info('DocSend Bot started successfully');
-    logger.info(`Server is running on port ${process.env.PORT || 3000}`);
-  } catch (error) {
-    logger.error('Failed to start DocSend Bot', { error: error.message });
-    process.exit(1);
-  }
-})();
 
 module.exports = app; 

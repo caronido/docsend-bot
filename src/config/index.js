@@ -68,12 +68,19 @@ const config = {
 
 // Validation
 function validateConfig() {
-  const required = [
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Base required config for all environments
+  const baseRequired = [
     'slack.botToken',
     'slack.signingSecret',
-    'slack.appToken',
     'docsend.viewerEmail',
   ];
+  
+  // Additional required config for development (Socket Mode)
+  const devRequired = isProduction ? [] : ['slack.appToken'];
+  
+  const required = [...baseRequired, ...devRequired];
   
   const missing = required.filter(key => {
     const value = key.split('.').reduce((obj, k) => obj?.[k], config);
@@ -87,6 +94,9 @@ function validateConfig() {
   if (!config.docsend.emailCredentials) {
     console.warn('Warning: EMAIL_INBOX_CREDENTIALS not configured. OTP retrieval will not work.');
   }
+  
+  // Log environment-specific configuration
+  console.log(`Configuration validated for ${isProduction ? 'production' : 'development'} environment`);
   
   return true;
 }
