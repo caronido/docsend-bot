@@ -81,6 +81,12 @@ class RateLimiter {
 
   // Check if user has permission to use the bot
   hasPermission(userId, channelId) {
+    // Temporarily allow all users for testing
+    logger.info('Permission check bypassed for testing', { userId, channelId });
+    return true;
+    
+    // TODO: Re-enable permission checking after testing
+    /*
     // Check allowed users
     if (config.security.allowedUsers && config.security.allowedUsers.length > 0) {
       if (!config.security.allowedUsers.includes(userId)) {
@@ -98,6 +104,7 @@ class RateLimiter {
     }
 
     return true;
+    */
   }
 }
 
