@@ -30,6 +30,8 @@ if (isDevelopment) {
   appConfig.appToken = config.slack.appToken;
   logger.info('🔌 Development mode: Using Socket Mode');
 } else {
+  // Production mode: Configure for HTTP endpoints
+  appConfig.socketMode = false;
   logger.info('🚀 Production mode: Using HTTP endpoints');
 }
 
