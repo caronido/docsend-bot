@@ -30,6 +30,12 @@ class DocSendService {
         ]
       };
 
+      // Use system Chromium in production if available
+      if (process.env.NODE_ENV === 'production' && process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
+        launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+        logger.info('Using system Chromium for production', { path: launchOptions.executablePath });
+      }
+
       if (config.proxy.url) {
         launchOptions.proxy = { server: config.proxy.url };
       }

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "postinstall": "npx playwright install chromium",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src/",
