@@ -500,8 +500,8 @@ class DocSendService {
       let pageNum = 1;
       const maxPages = config.rateLimiting.maxPages;
       
-      // TEMPORARY: Limit to 15 pages for testing
-      const testPageLimit = 15;
+      // TEMPORARY: Limit to 20 pages for testing
+      const testPageLimit = 20;
       logger.info(`TESTING MODE: Limiting capture to ${testPageLimit} pages`);
       
       // Start from page 1 and navigate forward, capturing each page
