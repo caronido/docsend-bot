@@ -88,14 +88,41 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     if (!text || !text.trim()) {
       await respond({
         response_type: 'ephemeral',
-        text: '❌ Please provide a DocSend URL. Usage: `/docsend-bot <docsend_url>`'
+        text: '❌ Please provide a DocSend URL. Usage: `/docsend-bot <docsend_url> [pages]`\n\nExamples:\n• `/docsend-bot https://docsend.com/view/abc123` (default: 15 pages)\n• `/docsend-bot https://docsend.com/view/abc123 5` (5 pages)\n• `/docsend-bot https://docsend.com/view/abc123 all` (all pages)'
       });
       return;
     }
 
-    const docsendUrl = text.trim();
+    // Parse command text for URL and optional page count
+    const commandParts = text.trim().split(/\s+/);
+    const docsendUrl = commandParts[0];
+    const pageParam = commandParts[1];
     
-    // Validate URL format
+    // Parse page parameter
+    let maxPages = 15; // Default
+    if (pageParam) {
+      if (pageParam.toLowerCase() === 'all') {
+        maxPages = config.rateLimiting.maxPages; // Use config max (300)
+      } else {
+        const parsedPages = parseInt(pageParam);
+        if (isNaN(parsedPages) || parsedPages < 1 || parsedPages > config.rateLimiting.maxPages) {
+          await respond({
+            response_type: 'ephemeral',
+            text: `❌ Invalid page count. Please provide a number between 1 and ${config.rateLimiting.maxPages}, or use 'all' for all pages.\n\nUsage: \`/docsend-bot <docsend_url> [pages]\``
+          });
+          return;
+        }
+        maxPages = parsedPages;
+      }
+    }
+    
+    logger.info('Parsed command parameters', { 
+      url: docsendUrl, 
+      pageParam, 
+      maxPages,
+      defaultMax: config.rateLimiting.maxPages
+    });
+
     const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\?[^\s]*)?$/;
     if (!docsendPattern.test(docsendUrl)) {
       await respond({
@@ -111,7 +138,8 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
       channelId: channel_id,
       url: docsendUrl,
       responseUrl: response_url,
-      threadTs: thread_ts
+      threadTs: thread_ts,
+      maxPages: maxPages // Pass maxPages to job processor
     };
 
     // Mark job as started in rate limiter
@@ -130,7 +158,7 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     // Send immediate response
     await respond({
       response_type: 'ephemeral',
-      text: '🔄 Starting DocSend conversion... You\'ll receive the PDF when it\'s ready!'
+      text: `🔄 Starting DocSend conversion...\n📄 **Page limit:** ${maxPages === config.rateLimiting.maxPages ? 'All pages' : maxPages + ' pages'}\n⏱️ You'll receive the PDF when it's ready!`
     });
 
   } catch (error) {
@@ -165,6 +193,27 @@ app.event('app_mention', async ({ event, say }) => {
     if (docsendUrlMatch) {
       const docsendUrl = docsendUrlMatch[0];
       
+      // Parse optional page parameter from the mention text
+      let maxPages = 15; // Default
+      const pageMatch = text.match(/(?:pages?|limit)\s*[:=]?\s*(\d+|all)/i);
+      if (pageMatch) {
+        const pageParam = pageMatch[1];
+        if (pageParam.toLowerCase() === 'all') {
+          maxPages = config.rateLimiting.maxPages;
+        } else {
+          const parsedPages = parseInt(pageParam);
+          if (!isNaN(parsedPages) && parsedPages >= 1 && parsedPages <= config.rateLimiting.maxPages) {
+            maxPages = parsedPages;
+          }
+        }
+      }
+      
+      logger.info('Parsed mention parameters', { 
+        url: docsendUrl, 
+        maxPages,
+        defaultMax: config.rateLimiting.maxPages
+      });
+
       // Check permissions
       if (!rateLimiter.hasPermission(user, channel)) {
         await say({
@@ -190,7 +239,8 @@ app.event('app_mention', async ({ event, say }) => {
         channelId: channel,
         url: docsendUrl,
         responseUrl: null, // No response URL for mentions
-        threadTs: thread_ts
+        threadTs: thread_ts,
+        maxPages: maxPages // Pass maxPages to job processor
       };
 
       // Mark job as started
@@ -198,7 +248,7 @@ app.event('app_mention', async ({ event, say }) => {
 
       // Send acknowledgment
       await say({
-        text: '🔄 Starting DocSend conversion... You\'ll receive the PDF when it\'s ready!',
+        text: `🔄 Starting DocSend conversion...\n📄 **Page limit:** ${maxPages === config.rateLimiting.maxPages ? 'All pages' : maxPages + ' pages'}\n⏱️ You'll receive the PDF when it's ready!`,
         thread_ts: thread_ts
       });
 
@@ -214,7 +264,7 @@ app.event('app_mention', async ({ event, say }) => {
     } else {
       // No DocSend URL found
       await say({
-        text: '👋 Hi! I can convert DocSend links to PDFs. Just mention me with a DocSend URL, or use `/docsend-bot <url>`.',
+        text: '👋 Hi! I can convert DocSend links to PDFs.\n\n**Usage:**\n• Mention me with a DocSend URL: `@docsend-bot https://docsend.com/view/abc123`\n• Use slash command: `/docsend-bot <url> [pages]`\n\n**Page Options:**\n• Default: 15 pages\n• Specify pages: `@docsend-bot https://docsend.com/view/abc123 pages:5`\n• All pages: `@docsend-bot https://docsend.com/view/abc123 pages:all`',
         thread_ts: thread_ts
       });
     }

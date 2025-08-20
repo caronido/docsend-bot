@@ -542,22 +542,22 @@ class DocSendService {
   }
 
   // Capture all pages in a single pass
-  async captureAllPages() {
+  async captureAllPages(maxPages = 15) {
     try {
-      logger.info('Starting single-pass page capture and counting');
+      logger.info('Starting single-pass page capture and counting', { maxPages });
       
       const screenshots = [];
       let pageCount = 0;
       let pageNum = 1;
-      const maxPages = config.rateLimiting.maxPages;
+      const configMaxPages = config.rateLimiting.maxPages;
       
-      // TEMPORARY: Limit to 20 pages for testing
-      const testPageLimit = 20;
-      logger.info(`TESTING MODE: Limiting capture to ${testPageLimit} pages`);
+      // Use provided maxPages or default to 15
+      const pageLimit = maxPages || 15;
+      logger.info(`Page capture limited to ${pageLimit} pages (config max: ${configMaxPages})`);
       
       // Start from page 1 and navigate forward, capturing each page
-      while (pageNum <= testPageLimit) {
-        logger.info('Capturing page', { pageNum });
+      while (pageNum <= pageLimit) {
+        logger.info('Capturing page', { pageNum, pageLimit });
         
         // Take screenshot of current page
         const screenshot = await this.capturePage(pageNum);
@@ -579,9 +579,9 @@ class DocSendService {
           logger.info(`Screenshot saved locally: ${filename}`);
         }
         
-        // Stop after reaching the test limit
-        if (pageNum >= testPageLimit) {
-          logger.info(`Reached test limit of ${testPageLimit} pages`);
+        // Stop after reaching the specified limit
+        if (pageNum >= pageLimit) {
+          logger.info(`Reached specified limit of ${pageLimit} pages`);
           pageCount = pageNum;
           break;
         }
@@ -604,12 +604,12 @@ class DocSendService {
         
         // Progress update
         if (pageNum % 5 === 0) {
-          logger.info('Capture progress', { completed: pageNum - 1 });
+          logger.info('Capture progress', { completed: pageNum - 1, pageLimit });
         }
       }
       
       // pageCount is already set correctly when we break from the loop
-      logger.info('All pages captured successfully', { totalPages: pageCount });
+      logger.info('All pages captured successfully', { totalPages: pageCount, requestedLimit: pageLimit });
       return screenshots;
     } catch (error) {
       logger.error('Failed to capture all pages', { error: error.message });
