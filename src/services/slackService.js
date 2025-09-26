@@ -58,7 +58,7 @@ class SlackService {
         filename: filename,
         title: 'DocSend PDF',
         initial_comment: this.formatUploadComment(originalUrl),
-        thread_ts: threadTs
+        thread_ts: threadTs ? String(threadTs) : undefined
       };
 
       const result = await this.client.files.uploadV2(uploadParams);
@@ -88,7 +88,7 @@ class SlackService {
       const params = {
         channel: channelId,
         text: errorMessage,
-        thread_ts: threadTs,
+        thread_ts: threadTs ? String(threadTs) : undefined,
         unfurl_links: false
       };
 
@@ -116,7 +116,7 @@ class SlackService {
       const params = {
         channel: channelId,
         text: message,
-        thread_ts: threadTs,
+        thread_ts: threadTs ? String(threadTs) : undefined,
         unfurl_links: false
       };
 
@@ -228,7 +228,7 @@ class SlackService {
       const params = {
         channel: channelId,
         text: message,
-        thread_ts: threadTs,
+        thread_ts: threadTs ? String(threadTs) : undefined,
         response_type: 'ephemeral'
       };
 

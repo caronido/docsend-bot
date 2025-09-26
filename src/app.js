@@ -174,6 +174,12 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     });
 
     const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\/[a-zA-Z0-9\/]+)?(\?[^\s]*)?$/;
+    logger.info('URL validation check', { 
+      url: docsendUrl, 
+      pattern: docsendPattern.toString(),
+      isValid: docsendPattern.test(docsendUrl)
+    });
+    
     if (!docsendPattern.test(docsendUrl)) {
       await respond({
         response_type: 'ephemeral',
