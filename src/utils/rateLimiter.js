@@ -13,7 +13,7 @@ class RateLimiter {
 
     // Per-user cooldown limiter
     this.userLimiter = new RateLimiterMemory({
-      keyGenerator: (req) => req.body.user_id || 'anonymous',
+      keyGenerator: (userId) => userId || 'anonymous',
       points: 1,
       duration: config.rateLimiting.userCooldownSeconds,
     });

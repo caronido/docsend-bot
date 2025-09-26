@@ -75,13 +75,21 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     }
 
     // Check rate limits
-    const rateLimitCheck = await rateLimiter.canStartJob(user_id);
-    if (!rateLimitCheck.allowed) {
-      await respond({
-        response_type: 'ephemeral',
-        text: `⏳ ${rateLimitCheck.reason}${rateLimitCheck.retryAfter ? ` Please try again in ${Math.ceil(rateLimitCheck.retryAfter / 1000)} seconds.` : ''}`
+    try {
+      const rateLimitCheck = await rateLimiter.canStartJob(user_id);
+      if (!rateLimitCheck.allowed) {
+        await respond({
+          response_type: 'ephemeral',
+          text: `⏳ ${rateLimitCheck.reason}${rateLimitCheck.retryAfter ? ` Please try again in ${Math.ceil(rateLimitCheck.retryAfter / 1000)} seconds.` : ''}`
+        });
+        return;
+      }
+    } catch (rateLimitError) {
+      logger.error('Rate limiter check failed', { 
+        userId: user_id, 
+        error: rateLimitError.message 
       });
-      return;
+      // Continue anyway for now, but log the error
     }
 
     // Validate command text (should be a DocSend URL)
