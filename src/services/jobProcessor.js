@@ -143,10 +143,10 @@ class JobProcessor {
 
   // Validate DocSend URL
   validateDocSendUrl(url) {
-    const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\?[^\s]*)?$/;
+    const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\/[a-zA-Z0-9\/]+)?(\?[^\s]*)?$/;
     
     if (!docsendPattern.test(url)) {
-      throw new Error('Invalid DocSend URL. Please provide a valid URL in the format: https://docsend.com/view/...');
+      throw new Error('Invalid DocSend URL. Please provide a valid URL in the format: https://docsend.com/view/...\n\nSupported formats:\n• https://docsend.com/view/abc123\n• https://docsend.com/view/abc123/d/xyz789');
     }
   }
 

@@ -60,11 +60,11 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     const docsendUrl = text.trim();
     
     // Validate URL format
-    const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\?[^\s]*)?$/;
+    const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\/[a-zA-Z0-9\/]+)?(\?[^\s]*)?$/;
     if (!docsendPattern.test(docsendUrl)) {
       await respond({
         response_type: 'ephemeral',
-        text: '❌ Invalid DocSend URL. Please provide a valid URL in the format: `https://docsend.com/view/...`'
+        text: '❌ Invalid DocSend URL. Please provide a valid URL in the format: `https://docsend.com/view/...`\n\nSupported formats:\n• `https://docsend.com/view/abc123`\n• `https://docsend.com/view/abc123/d/xyz789`'
       });
       return;
     }
