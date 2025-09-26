@@ -125,7 +125,7 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     if (!text || !text.trim()) {
       await respond({
         response_type: 'ephemeral',
-        text: '❌ Please provide a DocSend URL. Usage: `/docsend-bot <docsend_url> [pages]`\n\nExamples:\n• `/docsend-bot https://docsend.com/view/abc123` (default: 15 pages)\n• `/docsend-bot https://docsend.com/view/abc123 5` (5 pages)\n• `/docsend-bot https://docsend.com/view/abc123 all` (all pages)'
+        text: '❌ Please provide a DocSend URL. Usage: `/docsend-bot <docsend_url> [pages]`\n\nExamples:\n• `/docsend-bot https://docsend.com/view/abc123` (all pages)\n• `/docsend-bot https://docsend.com/view/abc123/d/xyz789 1,3,5` (specific pages)\n• `/docsend-bot https://docsend.com/view/abc123 all` (all pages)'
       });
       return;
     }
@@ -173,11 +173,11 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
       defaultMax: config.rateLimiting.maxPages
     });
 
-    const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\?[^\s]*)?$/;
+    const docsendPattern = /^https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\/[a-zA-Z0-9\/]+)?(\?[^\s]*)?$/;
     if (!docsendPattern.test(docsendUrl)) {
       await respond({
         response_type: 'ephemeral',
-        text: '❌ Invalid DocSend URL. Please provide a valid URL in the format: `https://docsend.com/view/...`'
+        text: '❌ Invalid DocSend URL. Please provide a valid URL in the format: `https://docsend.com/view/...`\n\nSupported formats:\n• `https://docsend.com/view/abc123`\n• `https://docsend.com/view/abc123/d/xyz789`'
       });
       return;
     }
@@ -249,7 +249,7 @@ app.event('app_mention', async ({ event, say }) => {
     logger.info('App mention received', { userId: user, channelId: channel, text });
 
     // Check if the mention contains a DocSend URL
-    const docsendUrlMatch = text.match(/https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\?[^\s]*)?/);
+    const docsendUrlMatch = text.match(/https?:\/\/docsend\.com\/view\/[a-zA-Z0-9]+(\/[a-zA-Z0-9\/]+)?(\?[^\s]*)?/);
     
     if (docsendUrlMatch) {
       const docsendUrl = docsendUrlMatch[0];
@@ -341,7 +341,7 @@ app.event('app_mention', async ({ event, say }) => {
     } else {
       // No DocSend URL found
       await say({
-        text: '👋 Hi! I can convert DocSend links to PDFs.\n\n**Usage:**\n• Mention me with a DocSend URL: `@docsend-bot https://docsend.com/view/abc123`\n• Use slash command: `/docsend-bot <url> [pages]`\n\n**Page Options:**\n• All pages: `/docsend-bot <url>` or `/docsend-bot <url> all`\n• Specific pages: `/docsend-bot <url> 1,3,5`\n• Page range: `/docsend-bot <url> 1-5`\n• Mixed: `/docsend-bot <url> 1,3-5,7`',
+        text: '👋 Hi! I can convert DocSend links to PDFs.\n\n**Usage:**\n• Mention me with a DocSend URL: `@docsend-bot https://docsend.com/view/abc123`\n• Use slash command: `/docsend-bot <url> [pages]`\n\n**Supported URL formats:**\n• `https://docsend.com/view/abc123`\n• `https://docsend.com/view/abc123/d/xyz789`\n\n**Page Options:**\n• All pages: `/docsend-bot <url>` or `/docsend-bot <url> all`\n• Specific pages: `/docsend-bot <url> 1,3,5`\n• Page range: `/docsend-bot <url> 1-5`\n• Mixed: `/docsend-bot <url> 1,3-5,7`',
         thread_ts: thread_ts
       });
     }
