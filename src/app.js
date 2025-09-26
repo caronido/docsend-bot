@@ -4,6 +4,35 @@ const { logger } = require('./utils/logger');
 const RateLimiter = require('./utils/rateLimiter');
 const JobProcessor = require('./services/jobProcessor');
 
+// Helper function to parse page numbers from user input
+function parsePageNumbers(pageParam) {
+  const pages = new Set();
+  const parts = pageParam.split(',');
+  
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (trimmed.includes('-')) {
+      // Handle range (e.g., "1-5")
+      const [start, end] = trimmed.split('-').map(n => parseInt(n.trim()));
+      if (isNaN(start) || isNaN(end) || start > end) {
+        throw new Error(`Invalid range: ${trimmed}`);
+      }
+      for (let i = start; i <= end; i++) {
+        pages.add(i);
+      }
+    } else {
+      // Handle single page number
+      const pageNum = parseInt(trimmed);
+      if (isNaN(pageNum)) {
+        throw new Error(`Invalid page number: ${trimmed}`);
+      }
+      pages.add(pageNum);
+    }
+  }
+  
+  return Array.from(pages).sort((a, b) => a - b);
+}
+
 // Determine environment and configuration
 const isProduction = process.env.NODE_ENV === 'production';
 const isDevelopment = !isProduction;
@@ -106,28 +135,41 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     const docsendUrl = commandParts[0];
     const pageParam = commandParts[1];
     
-    // Parse page parameter
-    let maxPages = 15; // Default
+    // Parse page parameter - support specific page numbers or ranges
+    let pageNumbers = null; // null means capture all pages
     if (pageParam) {
       if (pageParam.toLowerCase() === 'all') {
-        maxPages = config.rateLimiting.maxPages; // Use config max (300)
+        pageNumbers = null; // Capture all pages
       } else {
-        const parsedPages = parseInt(pageParam);
-        if (isNaN(parsedPages) || parsedPages < 1 || parsedPages > config.rateLimiting.maxPages) {
+        // Parse page numbers (e.g., "1,3,5" or "1-5" or "1,3-5,7")
+        try {
+          pageNumbers = parsePageNumbers(pageParam);
+          if (pageNumbers.length === 0) {
+            throw new Error('No valid page numbers');
+          }
+          // Validate page numbers
+          const invalidPages = pageNumbers.filter(p => p < 1 || p > config.rateLimiting.maxPages);
+          if (invalidPages.length > 0) {
+            await respond({
+              response_type: 'ephemeral',
+              text: `❌ Invalid page numbers: ${invalidPages.join(', ')}. Pages must be between 1 and ${config.rateLimiting.maxPages}.\n\nUsage: \`/docsend-bot <docsend_url> [pages]\`\nExamples:\n• \`/docsend-bot <url> 1,3,5\` (pages 1, 3, 5)\n• \`/docsend-bot <url> 1-5\` (pages 1-5)\n• \`/docsend-bot <url> all\` (all pages)`
+            });
+            return;
+          }
+        } catch (error) {
           await respond({
             response_type: 'ephemeral',
-            text: `❌ Invalid page count. Please provide a number between 1 and ${config.rateLimiting.maxPages}, or use 'all' for all pages.\n\nUsage: \`/docsend-bot <docsend_url> [pages]\``
+            text: `❌ Invalid page format. Please use:\n• Specific pages: \`1,3,5\`\n• Page range: \`1-5\`\n• All pages: \`all\`\n\nUsage: \`/docsend-bot <docsend_url> [pages]\``
           });
           return;
         }
-        maxPages = parsedPages;
       }
     }
     
     logger.info('Parsed command parameters', { 
       url: docsendUrl, 
       pageParam, 
-      maxPages,
+      pageNumbers,
       defaultMax: config.rateLimiting.maxPages
     });
 
@@ -147,7 +189,7 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
       url: docsendUrl,
       responseUrl: response_url,
       threadTs: thread_ts,
-      maxPages: maxPages // Pass maxPages to job processor
+      pageNumbers: pageNumbers // Pass specific page numbers to job processor
     };
 
     // Mark job as started in rate limiter
@@ -164,9 +206,20 @@ app.command('/docsend-bot', async ({ command, ack, respond }) => {
     });
 
     // Send immediate response
+    let pageInfo = 'All pages';
+    if (pageNumbers) {
+      if (pageNumbers.length === 1) {
+        pageInfo = `Page ${pageNumbers[0]}`;
+      } else if (pageNumbers.length <= 5) {
+        pageInfo = `Pages ${pageNumbers.join(', ')}`;
+      } else {
+        pageInfo = `${pageNumbers.length} specific pages`;
+      }
+    }
+    
     await respond({
       response_type: 'ephemeral',
-      text: `🔄 Starting DocSend conversion...\n📄 **Page limit:** ${maxPages === config.rateLimiting.maxPages ? 'All pages' : maxPages + ' pages'}\n⏱️ You'll receive the PDF when it's ready!`
+      text: `🔄 Starting DocSend conversion...\n📄 **Pages:** ${pageInfo}\n⏱️ You'll receive the PDF when it's ready!`
     });
 
   } catch (error) {
@@ -202,23 +255,28 @@ app.event('app_mention', async ({ event, say }) => {
       const docsendUrl = docsendUrlMatch[0];
       
       // Parse optional page parameter from the mention text
-      let maxPages = 15; // Default
-      const pageMatch = text.match(/(?:pages?|limit)\s*[:=]?\s*(\d+|all)/i);
+      let pageNumbers = null; // null means capture all pages
+      const pageMatch = text.match(/(?:pages?|limit)\s*[:=]?\s*([^,\s]+(?:[,\s-][^,\s]+)*)/i);
       if (pageMatch) {
-        const pageParam = pageMatch[1];
+        const pageParam = pageMatch[1].trim();
         if (pageParam.toLowerCase() === 'all') {
-          maxPages = config.rateLimiting.maxPages;
+          pageNumbers = null; // Capture all pages
         } else {
-          const parsedPages = parseInt(pageParam);
-          if (!isNaN(parsedPages) && parsedPages >= 1 && parsedPages <= config.rateLimiting.maxPages) {
-            maxPages = parsedPages;
+          try {
+            pageNumbers = parsePageNumbers(pageParam);
+            if (pageNumbers.length === 0) {
+              pageNumbers = null; // Fallback to all pages
+            }
+          } catch (error) {
+            logger.warn('Failed to parse page numbers from mention', { pageParam, error: error.message });
+            pageNumbers = null; // Fallback to all pages
           }
         }
       }
       
       logger.info('Parsed mention parameters', { 
         url: docsendUrl, 
-        maxPages,
+        pageNumbers,
         defaultMax: config.rateLimiting.maxPages
       });
 
@@ -248,15 +306,26 @@ app.event('app_mention', async ({ event, say }) => {
         url: docsendUrl,
         responseUrl: null, // No response URL for mentions
         threadTs: thread_ts,
-        maxPages: maxPages // Pass maxPages to job processor
+        pageNumbers: pageNumbers // Pass specific page numbers to job processor
       };
 
       // Mark job as started
       rateLimiter.startJob(`job-${user}-${Date.now()}`, user);
 
       // Send acknowledgment
+      let pageInfo = 'All pages';
+      if (pageNumbers) {
+        if (pageNumbers.length === 1) {
+          pageInfo = `Page ${pageNumbers[0]}`;
+        } else if (pageNumbers.length <= 5) {
+          pageInfo = `Pages ${pageNumbers.join(', ')}`;
+        } else {
+          pageInfo = `${pageNumbers.length} specific pages`;
+        }
+      }
+      
       await say({
-        text: `🔄 Starting DocSend conversion...\n📄 **Page limit:** ${maxPages === config.rateLimiting.maxPages ? 'All pages' : maxPages + ' pages'}\n⏱️ You'll receive the PDF when it's ready!`,
+        text: `🔄 Starting DocSend conversion...\n📄 **Pages:** ${pageInfo}\n⏱️ You'll receive the PDF when it's ready!`,
         thread_ts: thread_ts
       });
 
@@ -272,7 +341,7 @@ app.event('app_mention', async ({ event, say }) => {
     } else {
       // No DocSend URL found
       await say({
-        text: '👋 Hi! I can convert DocSend links to PDFs.\n\n**Usage:**\n• Mention me with a DocSend URL: `@docsend-bot https://docsend.com/view/abc123`\n• Use slash command: `/docsend-bot <url> [pages]`\n\n**Page Options:**\n• Default: 15 pages\n• Specify pages: `@docsend-bot https://docsend.com/view/abc123 pages:5`\n• All pages: `@docsend-bot https://docsend.com/view/abc123 pages:all`',
+        text: '👋 Hi! I can convert DocSend links to PDFs.\n\n**Usage:**\n• Mention me with a DocSend URL: `@docsend-bot https://docsend.com/view/abc123`\n• Use slash command: `/docsend-bot <url> [pages]`\n\n**Page Options:**\n• All pages: `/docsend-bot <url>` or `/docsend-bot <url> all`\n• Specific pages: `/docsend-bot <url> 1,3,5`\n• Page range: `/docsend-bot <url> 1-5`\n• Mixed: `/docsend-bot <url> 1,3-5,7`',
         thread_ts: thread_ts
       });
     }

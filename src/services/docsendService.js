@@ -618,78 +618,110 @@ class DocSendService {
     }
   }
 
-  // Capture all pages in a single pass
-  async captureAllPages(maxPages = 15) {
+  // Capture specific pages or all pages
+  async captureAllPages(pageNumbers = null) {
     try {
-      logger.info('Starting single-pass page capture and counting', { maxPages });
+      logger.info('Starting page capture', { pageNumbers });
       
       const screenshots = [];
-      let pageCount = 0;
-      let pageNum = 1;
-      const configMaxPages = config.rateLimiting.maxPages;
       
-      // Use provided maxPages or default to 15
-      const pageLimit = maxPages || 15;
-      logger.info(`Page capture limited to ${pageLimit} pages (config max: ${configMaxPages})`);
-      
-      // Start from page 1 and navigate forward, capturing each page
-      while (pageNum <= pageLimit) {
-        logger.info('Capturing page', { pageNum, pageLimit });
+      if (pageNumbers && pageNumbers.length > 0) {
+        // Capture specific pages
+        logger.info(`Capturing specific pages: ${pageNumbers.join(', ')}`);
         
-        // Take screenshot of current page
-        const screenshot = await this.capturePage(pageNum);
-        screenshots.push({
-          pageNumber: pageNum,
-          data: screenshot
+        for (const pageNum of pageNumbers) {
+          logger.info('Capturing specific page', { pageNum });
+          
+          // Navigate to the specific page
+          await this.navigateToPage(pageNum);
+          
+          // Take screenshot of current page
+          const screenshot = await this.capturePage(pageNum);
+          screenshots.push({
+            pageNumber: pageNum,
+            data: screenshot
+          });
+          
+          // Save screenshot locally for testing (optional)
+          if (config.debug?.saveScreenshots) {
+            const fs = require('fs');
+            const path = require('path');
+            const screenshotsDir = path.join(process.cwd(), 'screenshots');
+            if (!fs.existsSync(screenshotsDir)) {
+              fs.mkdirSync(screenshotsDir, { recursive: true });
+            }
+            const filename = `page-${pageNum.toString().padStart(2, '0')}.png`;
+            fs.writeFileSync(path.join(screenshotsDir, filename), screenshot);
+            logger.info(`Screenshot saved locally: ${filename}`);
+          }
+        }
+        
+        logger.info('Specific pages captured successfully', { 
+          totalPages: screenshots.length, 
+          requestedPages: pageNumbers 
         });
         
-        // Save screenshot locally for testing (optional)
-        if (config.debug?.saveScreenshots) {
-          const fs = require('fs');
-          const path = require('path');
-          const screenshotsDir = path.join(process.cwd(), 'screenshots');
-          if (!fs.existsSync(screenshotsDir)) {
-            fs.mkdirSync(screenshotsDir, { recursive: true });
+      } else {
+        // Capture all pages dynamically
+        logger.info('Capturing all pages dynamically');
+        
+        let pageNum = 1;
+        const configMaxPages = config.rateLimiting.maxPages;
+        
+        // Start from page 1 and navigate forward, capturing each page
+        while (pageNum <= configMaxPages) {
+          logger.info('Capturing page', { pageNum, maxAllowed: configMaxPages });
+          
+          // Take screenshot of current page
+          const screenshot = await this.capturePage(pageNum);
+          screenshots.push({
+            pageNumber: pageNum,
+            data: screenshot
+          });
+          
+          // Save screenshot locally for testing (optional)
+          if (config.debug?.saveScreenshots) {
+            const fs = require('fs');
+            const path = require('path');
+            const screenshotsDir = path.join(process.cwd(), 'screenshots');
+            if (!fs.existsSync(screenshotsDir)) {
+              fs.mkdirSync(screenshotsDir, { recursive: true });
+            }
+            const filename = `page-${pageNum.toString().padStart(2, '0')}.png`;
+            fs.writeFileSync(path.join(screenshotsDir, filename), screenshot);
+            logger.info(`Screenshot saved locally: ${filename}`);
           }
-          const filename = `page-${pageNum.toString().padStart(2, '0')}.png`;
-          fs.writeFileSync(path.join(screenshotsDir, filename), screenshot);
-          logger.info(`Screenshot saved locally: ${filename}`);
+          
+          // Check if there's a next page
+          const nextButton = await this.page.$('#nextPageIcon, button[aria-label*="next"], button[aria-label*="Next"], .next-button, .arrow-right, [data-react-class*="ChevronRight"]');
+          if (!nextButton || !(await nextButton.isVisible())) {
+            logger.info('No next button found, reached end of document');
+            break;
+          }
+          
+          // Navigate to next page
+          logger.info(`Navigating from page ${pageNum} to page ${pageNum + 1}`);
+          await nextButton.click();
+          await this.page.waitForTimeout(1500); // Give time for page transition
+          await this.page.waitForLoadState('domcontentloaded');
+          
+          pageNum++;
+          
+          // Progress update
+          if (pageNum % 5 === 0) {
+            logger.info('Capture progress', { completed: pageNum - 1 });
+          }
         }
         
-        // Stop after reaching the specified limit
-        if (pageNum >= pageLimit) {
-          logger.info(`Reached specified limit of ${pageLimit} pages`);
-          pageCount = pageNum;
-          break;
-        }
-        
-        // Check if there's a next page
-        const nextButton = await this.page.$('#nextPageIcon, button[aria-label*="next"], button[aria-label*="Next"], .next-button, .arrow-right, [data-react-class*="ChevronRight"]');
-        if (!nextButton || !(await nextButton.isVisible())) {
-          logger.info('No next button found, reached end of document');
-          pageCount = pageNum; // This is the actual page count
-          break;
-        }
-        
-        // Navigate to next page
-        logger.info(`Navigating from page ${pageNum} to page ${pageNum + 1}`);
-        await nextButton.click();
-        await this.page.waitForTimeout(1500); // Give time for page transition
-        await this.page.waitForLoadState('domcontentloaded');
-        
-        pageNum++;
-        
-        // Progress update
-        if (pageNum % 5 === 0) {
-          logger.info('Capture progress', { completed: pageNum - 1, pageLimit });
-        }
+        logger.info('All pages captured successfully', { 
+          totalPages: screenshots.length, 
+          maxAllowed: configMaxPages 
+        });
       }
       
-      // pageCount is already set correctly when we break from the loop
-      logger.info('All pages captured successfully', { totalPages: pageCount, requestedLimit: pageLimit });
       return screenshots;
     } catch (error) {
-      logger.error('Failed to capture all pages', { error: error.message });
+      logger.error('Failed to capture pages', { error: error.message });
       throw error;
     }
   }

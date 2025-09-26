@@ -57,7 +57,7 @@ class JobProcessor {
 
       // Capture all pages
       logJobProgress(jobId, 'capturing_pages', {});
-      const screenshots = await this.docSendService.captureAllPages(jobData.maxPages);
+      const screenshots = await this.docSendService.captureAllPages(jobData.pageNumbers);
 
       // Update job status
       this.updateJobStatus(jobId, 'creating_pdf');
