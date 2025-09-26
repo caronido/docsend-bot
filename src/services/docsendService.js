@@ -16,6 +16,7 @@ class DocSendService {
     try {
       const launchOptions = {
         headless: true,
+        timeout: 60000, // 60 seconds timeout for browser launch
         args: [
           '--disable-dev-shm-usage',
           '--no-sandbox',
@@ -27,6 +28,32 @@ class DocSendService {
           '--disable-renderer-backgrounding',
           '--disable-features=TranslateUI',
           '--disable-ipc-flooding-protection',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-extensions',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--mute-audio',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--disable-client-side-phishing-detection',
+          '--disable-hang-monitor',
+          '--disable-prompt-on-repost',
+          '--disable-domain-reliability',
+          '--disable-component-extensions-with-background-pages',
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+          '--disable-ipc-flooding-protection',
+          '--single-process',
+          '--no-zygote',
+          '--disable-dev-shm-usage',
+          '--memory-pressure-off',
+          '--max_old_space_size=4096'
         ]
       };
 
@@ -66,24 +93,57 @@ class DocSendService {
         launchOptions.proxy = { server: config.proxy.url };
       }
 
-      // Try to launch browser
-      try {
-        this.browser = await chromium.launch(launchOptions);
-      } catch (error) {
-        // If launch fails and we're in production, try to install browsers
-        if (process.env.NODE_ENV === 'production' && error.message.includes('ENOENT')) {
-          logger.warn('Browser launch failed, attempting to install Playwright browsers...');
-          try {
-            const { execSync } = require('child_process');
-            execSync('npx playwright install chromium', { stdio: 'inherit' });
-            logger.info('Playwright browsers installed successfully, retrying launch...');
-            this.browser = await chromium.launch(launchOptions);
-          } catch (installError) {
-            logger.error('Failed to install Playwright browsers', { error: installError.message });
-            throw new Error('Browser initialization failed and browser installation failed. Please ensure Chromium is available.');
+      // Try to launch browser with retry logic
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          logger.info(`Attempting browser launch (attempt ${retryCount + 1}/${maxRetries})`);
+          this.browser = await chromium.launch(launchOptions);
+          logger.info('Browser launched successfully');
+          break;
+        } catch (error) {
+          retryCount++;
+          logger.warn(`Browser launch attempt ${retryCount} failed`, { 
+            error: error.message,
+            retryCount,
+            maxRetries
+          });
+          
+          if (retryCount >= maxRetries) {
+            // If launch fails and we're in production, try to install browsers
+            if (process.env.NODE_ENV === 'production' && error.message.includes('ENOENT')) {
+              logger.warn('Browser launch failed, attempting to install Playwright browsers...');
+              try {
+                const { execSync } = require('child_process');
+                execSync('npx playwright install chromium', { stdio: 'inherit' });
+                logger.info('Playwright browsers installed successfully, retrying launch...');
+                this.browser = await chromium.launch(launchOptions);
+                break;
+              } catch (installError) {
+                logger.error('Failed to install Playwright browsers', { error: installError.message });
+                throw new Error('Browser initialization failed and browser installation failed. Please ensure Chromium is available.');
+              }
+            } else {
+              // Try one more time with minimal options if all retries failed
+              logger.warn('All retries failed, trying with minimal browser options...');
+              try {
+                const minimalOptions = {
+                  headless: true,
+                  timeout: 30000,
+                  args: ['--no-sandbox', '--disable-dev-shm-usage', '--single-process']
+                };
+                this.browser = await chromium.launch(minimalOptions);
+                logger.info('Browser launched successfully with minimal options');
+              } catch (minimalError) {
+                throw new Error(`Browser launch failed after ${maxRetries} attempts and minimal fallback: ${error.message}. Minimal fallback error: ${minimalError.message}`);
+              }
+            }
+          } else {
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
           }
-        } else {
-          throw error;
         }
       }
       
@@ -94,6 +154,8 @@ class DocSendService {
         timezoneId: 'America/New_York',
         permissions: ['geolocation'],
         geolocation: { latitude: 40.7128, longitude: -74.0060 },
+        // Set timeouts for context operations
+        timeout: 30000, // 30 seconds for page operations
         extraHTTPHeaders: {
           'Accept-Language': 'en-US,en;q=0.9',
           'Accept-Encoding': 'gzip, deflate, br',
@@ -127,7 +189,22 @@ class DocSendService {
     try {
       logger.info('Navigating to DocSend URL', { url: this.redactUrl(url) });
       
-      await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      // Set page timeout for navigation
+      this.page.setDefaultTimeout(30000); // 30 seconds
+      this.page.setDefaultNavigationTimeout(30000); // 30 seconds
+      
+      // Special handling for known problematic URLs
+      const isProblematicUrl = url.includes('8g32qgh6feph3ttm');
+      if (isProblematicUrl) {
+        logger.warn('Detected potentially problematic URL, using extended timeout');
+        this.page.setDefaultTimeout(60000); // 60 seconds for problematic URLs
+        this.page.setDefaultNavigationTimeout(60000);
+      }
+      
+      await this.page.goto(url, { 
+        waitUntil: 'domcontentloaded', 
+        timeout: isProblematicUrl ? 60000 : 30000 
+      });
       
       // Wait for page to load and give it a moment to stabilize
       await this.page.waitForLoadState('domcontentloaded');
