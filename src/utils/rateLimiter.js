@@ -13,7 +13,7 @@ class RateLimiter {
 
     // Per-user cooldown limiter
     this.userLimiter = new RateLimiterMemory({
-      keyGenerator: (userId) => userId || 'anonymous',
+      keyPrefix: 'user_',
       points: 1,
       duration: config.rateLimiting.userCooldownSeconds,
     });
@@ -24,8 +24,16 @@ class RateLimiter {
   // Check if a new job can be started
   async canStartJob(userId) {
     try {
+      logger.info('Rate limiter check started', { userId });
+      
       // Check global concurrent limit
       const globalResult = await this.globalLimiter.consume('global');
+      logger.info('Global rate limit check', { 
+        userId, 
+        remainingPoints: globalResult.remainingPoints,
+        totalHits: globalResult.totalHits
+      });
+      
       if (globalResult.remainingPoints < 0) {
         logger.warn('Global concurrent job limit exceeded', {
           userId,
@@ -34,8 +42,16 @@ class RateLimiter {
         return { allowed: false, reason: 'Too many concurrent jobs', retryAfter: globalResult.msBeforeNext };
       }
 
-      // Check user cooldown
-      const userResult = await this.userLimiter.consume(userId);
+      // Check user cooldown - pass userId as the key
+      const userKey = `user_${userId}`;
+      const userResult = await this.userLimiter.consume(userKey);
+      logger.info('User rate limit check', { 
+        userId, 
+        userKey,
+        remainingPoints: userResult.remainingPoints,
+        totalHits: userResult.totalHits
+      });
+      
       if (userResult.remainingPoints < 0) {
         logger.warn('User cooldown active', {
           userId,
@@ -44,9 +60,14 @@ class RateLimiter {
         return { allowed: false, reason: 'Please wait before starting another job', retryAfter: userResult.msBeforeNext };
       }
 
+      logger.info('Rate limiter check passed', { userId });
       return { allowed: true };
     } catch (error) {
-      logger.error('Rate limiter error', { error: error.message, userId });
+      logger.error('Rate limiter error', { 
+        error: error.message, 
+        userId,
+        stack: error.stack 
+      });
       return { allowed: false, reason: 'Rate limiter error' };
     }
   }
